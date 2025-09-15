@@ -4,9 +4,15 @@ import matplotlib.pyplot as plt
 import CalSim as cs
 import scipy as sp
 
+#Plotting and animation tools
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import animation
+
 #Define CBF parameters
 epsilon = 10 #CBF tuning parameter
 theta_d = np.pi/4 #safe angle from vertical
+e1 = np.array([[1, 0, 0]]).T
+e2 = np.array([[0, 1, 0]]).T
 e3 = np.array([[0, 0, 1]]).T
 e3Hat = cs.hat(e3)
 
@@ -174,6 +180,110 @@ def plot_sphere(x, y, z):
     plt.tight_layout()
     plt.show()
 
+def animate(RList):
+    #Set constant animtion parameters
+    FREQ = int(1/dt) #frequency
+
+    #initialize figure and a point
+    fig = plt.figure(figsize=(7, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    plt.axis('square')
+
+    #plot the sphere and configuration barrier
+    n_th, n_ph = 25, 25
+    theta = np.linspace(0, np.pi, n_th)      # polar angle from +z
+    phi   = np.linspace(0, 2*np.pi, n_ph)    # azimuth
+    TH, PH = np.meshgrid(theta, phi, indexing="ij")
+
+    X = np.sin(TH) * np.cos(PH)
+    Y = np.sin(TH) * np.sin(PH)
+    Z = np.cos(TH)
+
+    # ----- barrier h0(q) = q·e3 - cos(theta_d) -----
+    h0 = Z - np.cos(theta_d)
+    mask_safe = h0 >= 0  # spherical cap: angle to e3 <= theta_d
+
+    # Base sphere
+    ax.plot_surface(X, Y, Z, color='lightgray', alpha=0.3, edgecolor='none')
+
+    # Safe set
+    Xc = np.where(mask_safe, X, np.nan)
+    Yc = np.where(mask_safe, Y, np.nan)
+    Zc = np.where(mask_safe, Z, np.nan)
+    ax.plot_surface(Xc, Yc, Zc, color='blue', alpha=0.4, edgecolor='none')
+
+    # Boundary circle at polar angle theta_d
+    phi_b = np.linspace(0, 2*np.pi, 100)
+    xb = np.sin(theta_d) * np.cos(phi_b)
+    yb = np.sin(theta_d) * np.sin(phi_b)
+    zb = np.full_like(phi_b, np.cos(theta_d))
+    ax.plot(xb, yb, zb, 'k', linewidth=2)
+
+    #define points reprenting the three axes
+    x, y, z = [0, 0, 0, 0],  [0, 0, 0, 0], [0, 0, 0, 0] #center, e1Tip, e2Tip, e3Tip
+    points, = ax.plot(x, y, z, 'o')
+
+    #define lines for each of the three axes
+    lines = [ax.plot([], [], [], lw=2)[0] for _ in range(3)]
+    # colors = ['r', 'g', 'b']
+    # for ln, c in zip(lines, colors):
+    #     ln.set_color(c)
+
+    # --- trail of Re3 ---
+    trail_line, = ax.plot([], [], [], color='r', lw=2, alpha=0.9)  # plot a red line
+    trail_x, trail_y, trail_z = [], [], []
+
+    def update(num, data, lines):
+        #get the rotation matrix and position at num
+        R = data[num]
+
+        #Get each of the lines
+        e1Line = R @ e1
+        e2Line = R @ e2
+        e3Line = R @ e3
+        origin = np.zeros((3, 1))
+
+        #define a line between the points
+        lines[0].set_data(np.hstack((origin, e1Line))[0:2, :])
+        lines[0].set_3d_properties(np.hstack((origin, e1Line))[2, :])
+        lines[1].set_data(np.hstack((origin, e2Line))[0:2, :])
+        lines[1].set_3d_properties(np.hstack((origin, e2Line))[2, :])
+        lines[2].set_data(np.hstack((origin, e3Line))[0:2, :])
+        lines[2].set_3d_properties(np.hstack((origin, e3Line))[2, :])
+
+        #define the x points to plot
+        xPoints = [0, e1Line[0, 0],  e2Line[0, 0],  e3Line[0, 0]]
+        yPoints = [0, e1Line[1, 0],  e2Line[1, 0],  e3Line[1, 0]]
+        zPoints = [0, e1Line[2, 0],  e2Line[2, 0],  e3Line[2, 0]]
+
+        #update point markers
+        points.set_data(xPoints, yPoints)
+        points.set_3d_properties(zPoints, 'z')
+
+        # --- update Re3 trail ---
+        trail_x.append(e3Line[0, 0])
+        trail_y.append(e3Line[1, 0])
+        trail_z.append(e3Line[2, 0])
+        trail_line.set_data(trail_x, trail_y)
+        trail_line.set_3d_properties(trail_z)
+
+    # Setting the axes properties
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+
+    #run animation
+    num_frames = len(RList)-1
+    anim = animation.FuncAnimation(fig, update,  num_frames, fargs=(RList, lines), interval=1/FREQ*1000, blit=False)
+
+    # Formatting
+    ax.set_title('Configuration Trajectory')
+    ax.set_xlabel("x"); ax.set_ylabel("y"); ax.set_zlabel("z")
+    ax.set_box_aspect([1,1,1])
+    ax.set_xlim([-1,1]); ax.set_ylim([-1,1]); ax.set_zlim([-1,1])
+    plt.show()
+
+
 
 #Run Simulation
 R0 = cs.calc_Rx(np.pi * np.random.rand()) @ cs.calc_Ry(np.pi * np.random.rand()) #cs.calc_Rx(np.pi/4)
@@ -185,8 +295,18 @@ y = [qk[1, 0] for qk in q]
 z = [qk[2, 0] for qk in q]
 plot_sphere(x, y, z)
 
+#Animate
+animate(R)
+
 #plot barrier
 plt.plot(t, h[:-1])
 plt.xlabel("Time")
 plt.ylabel("h")
+plt.show()
+
+#plot input norm
+uNorm = [np.linalg.norm(uk) for uk in u]
+plt.plot(t, uNorm)
+plt.xlabel("Time")
+plt.ylabel("u norm")
 plt.show()
