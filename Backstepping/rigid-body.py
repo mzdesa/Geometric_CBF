@@ -180,7 +180,7 @@ def plot_sphere(x, y, z):
     plt.tight_layout()
     plt.show()
 
-def animate(RList):
+def animate(RList, save = False):
     #Set constant animtion parameters
     FREQ = int(1/dt) #frequency
 
@@ -281,6 +281,12 @@ def animate(RList):
     ax.set_xlabel("x"); ax.set_ylabel("y"); ax.set_zlabel("z")
     ax.set_box_aspect([1,1,1])
     ax.set_xlim([-1,1]); ax.set_ylim([-1,1]); ax.set_zlim([-1,1])
+
+    if save:
+        writer = animation.FFMpegWriter(fps=15, codec="h264", bitrate=2000)
+        anim.save('traj.mp4', writer=writer, dpi=150)
+
+    #Show animation
     plt.show()
 
 
