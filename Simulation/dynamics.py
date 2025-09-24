@@ -58,3 +58,9 @@ class Dynamics:
         Plotting function
         """
         pass
+
+    def animate(self):
+        """
+        Animation function
+        """
+        pass

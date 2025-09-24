@@ -4,6 +4,7 @@ This file contains code for running a sphere simulation on S2.
 import numpy as np
 import CalSim as cs
 from .dynamics import *
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 class Sphere(Dynamics):
@@ -55,6 +56,18 @@ class Sphere(Dynamics):
         """
         Plotting function
         """
+        try:
+            #Set matplotlib params
+            mpl.rcParams['text.usetex'] = True
+            mpl.rcParams['font.family'] = 'serif'
+            mpl.rcParams['text.latex.preamble'] =  r"""
+                                                    \usepackage{amsmath}
+                                                    \usepackage{amssymb}
+                                                    \usepackage{bm}
+                                                    """
+        except:
+            print("LaTeX Not Found")
+
         #Check if the simulation has been run
         if len(self.xHIST) == 0:
             print("No simulation found")
@@ -118,14 +131,37 @@ class Sphere(Dynamics):
             # Plot trajectory
             ax.plot(x, y, z, color = 'red')
             ax.scatter(x[0], y[0], z[0], color='green', s=50, label="Start")
-            # ax.scatter(x[-1], y[-1], z[-1], color='black', s=50, label="End")
 
             # Formatting
-            ax.set_title('Trajectory on the Sphere')
-            ax.set_xlabel("x"); ax.set_ylabel("y"); ax.set_zlabel("z")
+            ax.set_title(r'Trajectory on the Sphere $\mathbb{S}^2$', fontsize=18, pad = 2)
+            ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18); ax.set_zlabel(r'$z$', fontsize=18)
             ax.set_box_aspect([1,1,1])
             ax.set_xlim([-1,1]); ax.set_ylim([-1,1]); ax.set_zlim([-1,1])
             ax.grid(False)
 
             plt.tight_layout()
+            plt.show()
+
+            # Plot the top-down view; only plot the x and y of the above.
+            fig, ax = plt.subplots(figsize=(6,6))
+            th = np.linspace(0, 2*np.pi, 400)
+            
+            #plot sphere and safe set
+            ax.fill(np.cos(th), np.sin(th), color='lightgray', alpha=0.4) # S^1 boundary
+
+            # Cap boundary and fill: radius = sin(theta_d)
+            R = np.sin(self.theta_d)
+            xb, yb = R*np.cos(th), R*np.sin(th)
+            ax.fill(xb, yb, color = 'blue', alpha = 0.3)
+            ax.plot(xb, yb, 'k')
+
+            ax.plot(xd, yd, "b:") # desired trajectory projection
+            ax.plot(x, y, color = 'red') # trajectory projection
+            ax.scatter(x[0], y[0], color='green', s=50, label="Start")
+            
+            ax.set_aspect('equal', 'box')
+            ax.set_xlim([-1.05, 1.05]); ax.set_ylim([-1.05, 1.05])
+            ax.set_title(r'Top-Down View of Safe Trajectory on the Sphere', fontsize=18, pad = 3)
+            ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18)
+            ax.grid(True, alpha=0.2)
             plt.show()
