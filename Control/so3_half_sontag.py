@@ -4,11 +4,11 @@ Implement a sphere CBF controller with a gradient flow-based CBF
 import numpy as np
 import CalSim as cs
 
-class SO3GradFlow:
+class SO3HalfSontag:
     """
-    Gradient flow CBF on SO(3)
+    Half-Sontag controller on SO(3)
     """
-    def __init__(self, Ic, epsilon = 0.1, theta_d = np.pi/3, amp = 0.2, freq = 5):
+    def __init__(self, Ic, epsilon = 0.1, theta_d = np.pi/3, amp = 0.2, freq = 5, alpha = 5):
         """
         Sphere gradient flow controller
         """
@@ -25,6 +25,7 @@ class SO3GradFlow:
         #Store CBF parameters
         self.theta_d = theta_d
         self.epsilon = epsilon
+        self.alpha = alpha #Class K function constant
 
         #Store desired trajectory parameters
         self.amp = amp
@@ -81,7 +82,7 @@ class SO3GradFlow:
         
         return np.array([[xDDot, yDDot, zDDot]]).T
 
-    def geom_PD_S2(self, q, v, mu, t, kp = 4, kd = 4):
+    def geom_PD_S2(self, q, v, mu, t, kp = 10, kd = 5):
         """
         Evaluate the tracking control input on S2, using the geometric PD controller of GCMS
         32 and 12 is strong tracking
@@ -123,17 +124,82 @@ class SO3GradFlow:
         """
         return (self.e3.T @ R @ self.e3)[0, 0] - np.cos(self.theta_d)
     
-    def eval_kappa(self, R):
+    def eval_ab(self, R):
         """
-        Safe velocity vector field (gradient of h0)
+        Evaluate a and b functions for half-sontag
         """
-        return 1/(self.tildeI) * R @ cs.hat(self.e3Hat @ R.T @ self.e3)
+        a = self.eval_alpha(self.eval_h0(R))
+        b = 1 / self.tildeI * (self.e3.T @ R @ self.P @ R.T @ self.e3)[0, 0] 
+        return a, b
+    
+    def eval_gradh0(self, R):
+        """
+        Evaluate the Riemannian gradient of h0 on SO(3)
+        """
+        return 1 / self.tildeI * R @ cs.hat(self.e3Hat @ R.T @ self.e3)
+    
+    def eval_lamHS(self, R):
+        """
+        Evaluate lambda(a(R), b(R))
+        """
+        #evaluate a and b and gradient
+        a, b = self.eval_ab(R)
+
+        #evaluate lambdaHS(a, b)
+        if abs(b) < 1e-12:
+            return 0
+        else:
+            return (-a + np.sqrt(a**2 + b**2)) / (2 * b)
+    
+    def eval_HS(self, R):
+        """
+        Evaluate the half-sontag controller on SO(3)
+        """
+        return self.eval_lamHS(R) * self.eval_gradh0(R)
+    
+    def eval_grad_lam(self, R):
+        """
+        Evaluate dlamHS/da and dlamHS/db 
+        """
+        #evaluate a and b
+        a, b = self.eval_ab(R)
+
+        #evaluate lambda
+        p = self.eval_lamHS(R)
+
+        #calculate the derivative terms (see Max Cohen's paper)
+        dFdp = 2 * b * p + a
+        dFda = p
+        dFdb = p**2 - 1/4
+
+        #calculate and return derivatives (dLam/da and dLam/db)
+        return -1/dFdp * dFda, -1/dFdp * dFdb
+    
+    def eval_kappaDot(self, R, Omega):
+        """
+        Find the derivative of the half-sontag controller in the Lie algebra;
+        i.e. evaluate d/dt (R.T @ kappaHS)
+        """
+        #find lambdaHS(a(R), b(R))
+        lamHS = self.eval_lamHS(R)
+
+        #Calculate the derivative of lambdaHS
+        aDot = self.alpha * Omega.T @ self.e3Hat @ R.T @ self.e3
+        bDot = 1/self.tildeI * (self.e3.T @ R @ (cs.hat(Omega) @ self.P - self.P @ cs.hat(Omega)) @ R.T @ self.e3)[0, 0]
+        dLamda, dLamdb = self.eval_grad_lam(R)
+        lamHSDot = dLamda * aDot + dLamdb * bDot
+
+        #Calculate d/dt(R.T @ kappaHS) (derivative in Lie algebra)
+        kappaHSLieDot = (-1/self.tildeI * self.e3Hat @ cs.hat(Omega) @ R.T @ self.e3)
+
+        #evaluate and return kappaDot
+        return lamHSDot * R.T @ self.eval_gradh0(R) + lamHS * kappaHSLieDot
     
     def eval_eA(self, R, Omega):
         """
         Evaluate projected error in the Lie algebra under isomorhpism with R3
         """
-        return self.P @ (Omega - cs.vee_3d(R.T @ self.eval_kappa(R)))
+        return self.P @ (Omega - cs.vee_3d(R.T @ self.eval_HS(R)))
 
     def eval_h(self, R, Omega):
         """
@@ -146,14 +212,15 @@ class SO3GradFlow:
         """
         Class K function
         """
-        return 2*abs(np.cos(self.theta_d))/self.tildeI * r
+        return self.alpha * r
 
     def eval_Lfh(self, R, Omega):
         """
         Return the drift term of the Lie derivative
         """
         eA = self.eval_eA(R, Omega)
-        return (Omega.T @ self.e3Hat @ R.T @ self.e3 - self.epsilon * eA.T @ (self.e3Hat @ cs.hat(Omega) @ R.T @ self.e3 - cs.hat(Omega) @ self.Ic @ Omega))[0, 0]
+        kappaDot = self.eval_kappaDot(R, Omega)
+        return (Omega.T @ self.e3Hat @ R.T @ self.e3 - self.epsilon * eA.T @ (self.tildeI * kappaDot - cs.hat(Omega) @ self.Ic @ Omega))[0, 0]
 
     def eval_Lgh(self, R, Omega):
         """

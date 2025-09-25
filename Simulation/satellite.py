@@ -86,6 +86,7 @@ class Satellite(Dynamics):
         else:
             #Extract rotations from configuration history
             RHIST = [x[0] for x in self.xHIST]
+            OMEGAHIST = [x[1] for x in self.xHIST]
 
             #Extract X, Y, Z from rotation history - compute Re3 for the projection onto the sphere
             qHIST = [R @ self.e3 for R in RHIST] #gives a list of configurations on the sphere
@@ -105,6 +106,7 @@ class Satellite(Dynamics):
              # ----- plot -----
             fig = plt.figure(figsize=(7, 6))
             ax = fig.add_subplot(111, projection='3d')
+            fig.patch.set_facecolor('white') 
 
             # Base sphere
             ax.plot_surface(X, Y, Z, color='lightgray', alpha=0.3, edgecolor='none')
@@ -152,33 +154,108 @@ class Satellite(Dynamics):
             ax.set_box_aspect([1,1,1])
             ax.set_xlim([-1,1]); ax.set_ylim([-1,1]); ax.set_zlim([-1,1])
             ax.grid(False)
+            # ax.grid(True, alpha=0.01)
 
             plt.tight_layout()
             plt.show()
 
             # Plot the top-down view; only plot the x and y of the above.
-            fig, ax = plt.subplots(figsize=(6,6))
-            th = np.linspace(0, 2*np.pi, 400)
-            
-            #plot sphere and safe set
-            ax.fill(np.cos(th), np.sin(th), color='lightgray', alpha=0.4) # S^1 boundary
+            stereoProj = True
+            if stereoProj:
+                #Plot the stereographic projection
+                def stereoX(x, z):
+                    """
+                    Stereographic projection on the sphere (south pole deleted, See Lee p.30)
+                    """
+                    return x/(1+z)
+                def stereoY(y, z):
+                    return y/(1+z)         
+                
+                fig, ax = plt.subplots(figsize=(6,6))
 
-            # Cap boundary and fill: radius = sin(theta_d)
-            R = np.sin(self.theta_d)
-            xb, yb = R*np.cos(th), R*np.sin(th)
-            ax.fill(xb, yb, color = 'blue', alpha = 0.3)
-            ax.plot(xb, yb, 'k')
+                #Project the z = 0 slice to stereo coords
+                th = np.linspace(0, 2*np.pi, 400)
+                sphereXStereo, sphereYStereo = [stereoX(np.cos(theta), 0) for theta in th], [stereoY(np.sin(theta), 0) for theta in th]
+                ax.fill(sphereXStereo, sphereYStereo, color='lightgray', alpha=0.4) # S^1 boundary
 
-            ax.plot(xd, yd, "b:") # desired trajectory projection
-            ax.plot(x, y, color = 'red') # trajectory projection
-            ax.scatter(x[0], y[0], color='green', s=50, label="Start")
-            
-            ax.set_aspect('equal', 'box')
-            ax.set_xlim([-1.05, 1.05]); ax.set_ylim([-1.05, 1.05])
-            ax.set_title(r'Top-Down View of Safe Trajectory on the Sphere', fontsize=18, pad = 3)
-            ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18)
-            ax.grid(True, alpha=0.2)
-            plt.show()
+                #Project the boundary of the safe region to stereo coords
+                R = np.sin(self.theta_d)
+                xB, yB, zB = [R * np.cos(theta) for theta in th], [R * np.sin(theta) for theta in th], np.cos(self.theta_d)
+                xbS, ybS = [stereoX(xbi, zB) for xbi in xB], [stereoY(ybi, zB) for ybi in yB]
+                ax.fill(xbS, ybS, color = 'blue', alpha = 0.3)
+                ax.plot(xbS, ybS, 'k')
+
+                #Convert desired trajectory to stereo coords
+                xdS, ydS = [stereoX(xd[i], zd[i]) for i in range(len(xd))], [stereoY(yd[i], zd[i]) for i in range(len(yd))]
+                ax.plot(xdS, ydS, "b:") # desired trajectory projection
+
+                #Convert trajectory to stereo coords
+                xS, yS = [stereoX(x[i], z[i]) for i in range(len(x))], [stereoY(y[i], z[i]) for i in range(len(y))]
+                ax.plot(xS, yS, color = 'red') # trajectory projection
+                ax.scatter(stereoX(x[0], z[0]), stereoY(y[0], z[0]), color='green', s=50, label="Start")
+                plt.show()
+
+            else:
+                #Plot a direct top-down view
+                fig, ax = plt.subplots(figsize=(6,6))
+                th = np.linspace(0, 2*np.pi, 400)
+                
+                #plot sphere and safe set
+                ax.fill(np.cos(th), np.sin(th), color='lightgray', alpha=0.4) # S^1 boundary
+
+                # Cap boundary and fill: radius = sin(theta_d)
+                R = np.sin(self.theta_d)
+                xb, yb = R*np.cos(th), R*np.sin(th)
+                ax.fill(xb, yb, color = 'blue', alpha = 0.3)
+                ax.plot(xb, yb, 'k')
+
+                ax.plot(xd, yd, "b:") # desired trajectory projection
+                ax.plot(x, y, color = 'red') # trajectory projection
+                ax.scatter(x[0], y[0], color='green', s=50, label="Start")
+                
+                ax.set_aspect('equal', 'box')
+                ax.set_xlim([-1.05, 1.05]); ax.set_ylim([-1.05, 1.05])
+                ax.set_title(r'Top-Down View of Safe Trajectory on the Sphere', fontsize=18, pad = 5)
+                ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18)
+                ax.grid(True, alpha=0.2)
+                plt.show()
+
+
+            # Plot values of h0, h, and u
+            h0HIST = [self.contr.eval_h0(R) for R in RHIST]
+            hHIST = [self.contr.eval_h(RHIST[i], OMEGAHIST[i]) for i in range(len(RHIST))]
+            tau1HIST, tau2HIST = [u[0, 0] for u in self.uHIST], [u[1, 0] for u in self.uHIST]
+
+            # Plot on a 3x1 subplot
+            plotInputs = True
+            if plotInputs:
+                fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, constrained_layout=True) 
+                axes[0].plot(self.tHIST, h0HIST[:-1])     
+                axes[0].plot(self.tHIST, hHIST[:-1])
+                axes[1].plot(self.tHIST, tau1HIST)    
+                axes[1].plot(self.tHIST, tau2HIST)
+
+                #labels
+                axes[0].set_title(r"State and Configuration Safety", fontsize=18, pad = 3)
+                axes[0].legend([r'$h_0$', r'$h$'], fontsize=14)
+                axes[1].set_title(r"Inputs", fontsize=18, pad = 3)
+                axes[1].legend([r'$\tau_1$', r'$\tau_2$'], fontsize=14)
+                axes[1].set_xlabel(r"$t$", fontsize=18)
+                axes[0].grid(True, alpha=0.2)
+                axes[1].grid(True, alpha=0.2)
+                plt.show()
+            else:
+                #Only plot the barrier values
+                fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, constrained_layout=True) 
+                axes.plot(self.tHIST, h0HIST[:-1])     
+                axes.plot(self.tHIST, hHIST[:-1])
+
+                #labels
+                axes.set_title(r"State and Configuration Safety", fontsize=18, pad = 3)
+                axes.legend([r'$h_0$', r'$h$'], fontsize=14)
+                axes.set_xlabel(r"$t$", fontsize=18)
+                axes.grid(True, alpha=0.2)
+                plt.show()
 
     def animate(self):
         """
