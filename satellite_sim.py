@@ -18,8 +18,8 @@ contr = SO3HalfSontag(Ic, epsilon = epsilon, alpha = alpha) # Half-Sontag veloci
 sat = Satellite(contr)
 
 #Run the simulation
-R0 = cs.calc_Ry(np.pi/3.5) #@ cs.calc_Rx(-np.pi/6)  #np.eye(3) #
-Omega0 = np.zeros((3, 1))
+R0 = cs.calc_Ry(np.pi/3.7) #Trajectory starts at Ry(pi/3)
+Omega0 = -np.linalg.pinv(R0 @ contr.e3Hat) @ contr.eval_qd_dot(0) #Trajectory starts at (xDot, yDot, zDot) = (1/2, sin(thetaD), -sin(thetaD))
 sat.run_sim([R0, Omega0])
 sat.plot()
 # sat.animate()

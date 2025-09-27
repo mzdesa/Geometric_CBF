@@ -135,8 +135,8 @@ class Satellite(Dynamics):
                 # time grid
                 t = np.linspace(0, self.T, 500)
                 
-                # phi(t)
-                phi = self.theta_d + self.contr.amp * np.sin(self.contr.freq * t)
+                # phi(t) --- Let's mess with the offset a little bit
+                phi = self.theta_d + self.contr.amp * np.sin(self.contr.freq * t + self.contr.theta0) #self.contr.theta0
                 
                 # curve r(t)
                 xd = np.cos(t) * np.sin(phi)
@@ -149,7 +149,7 @@ class Satellite(Dynamics):
             ax.scatter(x[0], y[0], z[0], color='green', s=50, label="Start")
 
             # Formatting
-            ax.set_title(r'Projected Trajectory on $\mathbb{S}^2$', fontsize=18, pad = 2)
+            ax.set_title(r'Projected Trajectory on $\mathbb{S}^2$', fontsize=24, pad = 0, y = 1)
             ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18); ax.set_zlabel(r'$z$', fontsize=18)
             ax.set_box_aspect([1,1,1])
             ax.set_xlim([-1,1]); ax.set_ylim([-1,1]); ax.set_zlim([-1,1])
@@ -193,6 +193,11 @@ class Satellite(Dynamics):
                 xS, yS = [stereoX(x[i], z[i]) for i in range(len(x))], [stereoY(y[i], z[i]) for i in range(len(y))]
                 ax.plot(xS, yS, color = 'red') # trajectory projection
                 ax.scatter(stereoX(x[0], z[0]), stereoY(y[0], z[0]), color='green', s=50, label="Start")
+                ax.set_aspect('equal', 'box')
+                ax.set_xlim([-1.05, 1.05]); ax.set_ylim([-1.05, 1.05])
+                ax.set_title(r'Stereographic Projection on $\mathbb S^2$', fontsize=24, pad = 5)
+                ax.set_xlabel(r'$x$', fontsize=18); ax.set_ylabel(r'$y$', fontsize=18)
+                ax.grid(True, alpha=0.2)
                 plt.show()
 
             else:
@@ -229,33 +234,84 @@ class Satellite(Dynamics):
             # Plot on a 3x1 subplot
             plotInputs = True
             if plotInputs:
-                fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, constrained_layout=True) 
+                fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, constrained_layout=True, figsize=(6,6)) 
                 axes[0].plot(self.tHIST, h0HIST[:-1])     
                 axes[0].plot(self.tHIST, hHIST[:-1])
                 axes[1].plot(self.tHIST, tau1HIST)    
                 axes[1].plot(self.tHIST, tau2HIST)
 
                 #labels
-                axes[0].set_title(r"State and Configuration Safety", fontsize=18, pad = 3)
-                axes[0].legend([r'$h_0$', r'$h$'], fontsize=14)
-                axes[1].set_title(r"Inputs", fontsize=18, pad = 3)
-                axes[1].legend([r'$\tau_1$', r'$\tau_2$'], fontsize=14)
+                axes[0].set_title(r"State and Configuration Safety", fontsize=24, pad = 3)
+                axes[0].legend([r'$h_0$', r'$h$'], fontsize=14, loc = 'upper right')
+                axes[1].set_title(r"Inputs", fontsize=24, pad = 3)
+                axes[1].legend([r'$\tau_1$', r'$\tau_2$'], fontsize=14, loc = 'upper right')
                 axes[1].set_xlabel(r"$t$", fontsize=18)
                 axes[0].grid(True, alpha=0.2)
                 axes[1].grid(True, alpha=0.2)
                 plt.show()
             else:
                 #Only plot the barrier values
-                fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, constrained_layout=True) 
+                fig, axes = plt.subplots(nrows=1, ncols=1, sharex=True, constrained_layout=True, figsize=(6,6)) 
                 axes.plot(self.tHIST, h0HIST[:-1])     
                 axes.plot(self.tHIST, hHIST[:-1])
 
                 #labels
-                axes.set_title(r"State and Configuration Safety", fontsize=18, pad = 3)
+                axes.set_title(r"State and Configuration Safety", fontsize=24, pad = 3)
                 axes.legend([r'$h_0$', r'$h$'], fontsize=14)
                 axes.set_xlabel(r"$t$", fontsize=18)
                 axes.grid(True, alpha=0.2)
                 plt.show()
+
+
+            #Plot frames at a set of times. 10 second simulation, plot 10 frames
+             # ----- plot -----
+            fig = plt.figure(figsize=(18,18), constrained_layout = False)
+            ax = fig.add_subplot(111, projection='3d')
+            
+
+            #First, get the indices.
+            numFr = 10
+            frDeltaTime = self.tHIST[-1]/numFr #Time between frames
+            RIndexList = [i * int(len(self.tHIST)/numFr) for i in range(numFr)]
+            framelen = 0.5 #length of arms in the frame
+
+            for i in range(numFr + 1):
+                #Get the rotation matrix at that frame
+                if i < numFr:
+                    Ri = RHIST[RIndexList[i]]
+                    #Get the time
+                    ti = frDeltaTime * i
+                else:
+                    Ri = RHIST[-1]
+                    ti = self.tHIST[-1]
+
+                #Plot the frame at (ti, 0, 0) (frames move with time along the x-axis)
+                basePt = np.array([[ti, 0, 0]]).T
+                ax.scatter(basePt[0, 0], basePt[1, 0], basePt[2, 0], color = 'black')
+
+                #Calculate each axis position
+                axisX = basePt + framelen * Ri @ self.e1
+                axisY = basePt + framelen * Ri @ self.e2
+                axisZ = basePt + framelen * Ri @ self.e3
+
+                #Plot the axes
+                ax.plot([basePt[0, 0], axisX[0, 0]], [basePt[1, 0], axisX[1, 0]], [basePt[2, 0], axisX[2, 0]], color = 'red')
+                ax.plot([basePt[0, 0], axisY[0, 0]], [basePt[1, 0], axisY[1, 0]], [basePt[2, 0], axisY[2, 0]], color = 'green')
+                ax.plot([basePt[0, 0], axisZ[0, 0]], [basePt[1, 0], axisZ[1, 0]], [basePt[2, 0], axisZ[2, 0]], color = 'blue')
+
+
+                #Plot the sphere and safe set
+                ax.plot_surface(framelen * Xc + ti, framelen * Yc, framelen * Zc, color='blue', alpha=0.2, edgecolor='none')
+
+            # Formatting
+            ax.get_zaxis().set_ticklabels([]); ax.get_yaxis().set_ticklabels([])
+            ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+            ax.set_aspect('equal', 'box')
+            ax.grid(False)
+            fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+            plt.axis('off')
+            plt.tight_layout(pad=0)
+            plt.show()
 
     def animate(self):
         """

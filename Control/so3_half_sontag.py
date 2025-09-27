@@ -8,7 +8,7 @@ class SO3HalfSontag:
     """
     Half-Sontag controller on SO(3)
     """
-    def __init__(self, Ic, epsilon = 0.1, theta_d = np.pi/3, amp = 0.2, freq = 5, alpha = 5):
+    def __init__(self, Ic, epsilon = 0.1, theta_d = np.pi/3, amp = 0.2, freq = 5, alpha = 5, theta0 = -np.pi/2):
         """
         Sphere gradient flow controller
         """
@@ -30,6 +30,7 @@ class SO3HalfSontag:
         #Store desired trajectory parameters
         self.amp = amp
         self.freq = freq
+        self.theta0 = theta0 #offset around the circle (can tune this to start outside the safe set if you want)
 
         #Store pseudoinverse of projection matrix for tau calculation
         self.projInv = np.array([[0, -1, 0],
@@ -41,7 +42,7 @@ class SO3HalfSontag:
         Sinusoidal trajectory on S2 that oscillates about the safe set.
         """
         # phi(t)
-        phi = self.theta_d + self.amp * np.sin(self.freq * t)
+        phi = self.theta_d + self.amp * np.sin(self.freq * t + self.theta0)
         
         # curve r(t)
         x = np.cos(t) * np.sin(phi)
@@ -53,8 +54,8 @@ class SO3HalfSontag:
         """
         Return the time derivative of qd(t)
         """
-        phi = self.theta_d + self.amp * np.sin(self.freq * t)
-        phiDot = self.amp * self.freq * np.cos(self.freq * t)
+        phi = self.theta_d + self.amp * np.sin(self.freq * t + self.theta0)
+        phiDot = self.amp * self.freq * np.cos(self.freq * t + self.theta0)
         xDot = -np.sin(t) * np.sin(phi) + np.cos(t) * np.cos(phi) * phiDot
         yDot = np.cos(t) * np.sin(phi) + np.sin(t) * np.cos(phi) * phiDot
         zDot = -np.sin(phi) * phiDot
@@ -66,9 +67,9 @@ class SO3HalfSontag:
         qd(t) = (cos t sin phi(t), sin t sin phi(t), cos phi(t)),
         phi(t) = self.theta_d + self.amp * sin(self.freq * t).
         """
-        phi = self.theta_d + self.amp * np.sin(self.freq * t)
-        phiDot = self.amp * self.freq * np.cos(self.freq * t)
-        phiDDot = -self.amp * self.freq**2 * np.sin(self.freq * t)
+        phi = self.theta_d + self.amp * np.sin(self.freq * t + self.theta0)
+        phiDot = self.amp * self.freq * np.cos(self.freq * t + self.theta0)
+        phiDDot = -self.amp * self.freq**2 * np.sin(self.freq * t + self.theta0)
         
         xDDot = (-np.cos(t) * np.sin(phi)
                 - 2*np.sin(t) * np.cos(phi) * phiDot
